@@ -28,11 +28,9 @@ to integrate the changes.
 Review and save your local changes:
 
 ```bash
-git status
-git diff
 git add -A
-git diff --cached
 git commit -m "routine"
+git push
 ```
 
 `git add -A` includes all additions, edits, and deletions in the repository.
