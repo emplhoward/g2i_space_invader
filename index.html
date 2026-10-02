@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#070c17">
+  <title>Space Attack — Orbital Arcade</title>
+  <style>
+    /* Responsive shell. The arena keeps a consistent coordinate system at every size. */
+    :root { color-scheme: dark; --ink: #e8f3ff; --muted: #8393ad; --cyan: #63f6e7; --line: #253245; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100svh; background: #070c17; color: var(--ink); font: 14px system-ui, sans-serif; }
+    body::before { content: ""; position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 50% 25%, #14243c88, transparent 65%); }
+    .shell { position: relative; width: min(1200px, calc(100% - 48px), calc((100svh - 210px) * 1.5)); min-width: 280px; margin: 0 auto; }
+    header { height: 76px; display: flex; justify-content: space-between; align-items: center; }
+    .brand { font-weight: 800; letter-spacing: .17em; font-size: 13px; }
+    .brand span { color: var(--cyan); margin-right: 10px; }
+    .edition { font: 10px ui-monospace, monospace; color: var(--muted); letter-spacing: .13em; }
+    .status-dot { display: inline-block; width: 6px; height: 6px; background: var(--cyan); border-radius: 50%; margin-right: 8px; box-shadow: 0 0 10px #63f6e766; }
+    .console { border: 1px solid var(--line); border-radius: 13px; overflow: hidden; background: #080f1e; box-shadow: 0 25px 90px #0006; }
+    .hud { height: 68px; display: grid; grid-template-columns: 1.15fr 1.15fr 1fr 1fr auto; align-items: center; padding: 0 24px; gap: 18px; border-bottom: 1px solid var(--line); }
+    .stat-label { display: block; color: var(--muted); font: 9px ui-monospace, monospace; letter-spacing: .18em; margin-bottom: 5px; }
+    .stat-value { font: 700 20px ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+    #score, #lives { color: var(--cyan); }
+    #best { color: #ffce83; }
+    .arena { position: relative; width: 100%; aspect-ratio: 3 / 2; isolation: isolate; }
+    canvas { display: block; width: 100%; height: 100%; }
+    .screen { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; background: #070d19b8; backdrop-filter: blur(3px); }
+    [hidden] { display: none !important; }
+    #menu { background: linear-gradient(90deg, #070d1955, #070d19aa 50%, #070d1955); backdrop-filter: none; }
+    .panel { text-align: center; width: min(540px, 100%); }
+    .eyebrow { color: var(--cyan); font: 10px ui-monospace, monospace; letter-spacing: .23em; text-transform: uppercase; }
+    h1 { font-size: clamp(38px, 5.8vw, 78px); line-height: .94; margin: 23px 0 20px; letter-spacing: -.06em; font-weight: 950; }
+    h1 span { display: block; color: var(--cyan); text-shadow: 0 0 45px #63f6e72c; }
+    h2 { font-size: clamp(30px, 4vw, 48px); letter-spacing: -.04em; margin: 14px 0; }
+    .subtitle { color: #a3b3cb; line-height: 1.8; margin: 0 0 25px; }
+    button { font: 700 12px system-ui, sans-serif; cursor: pointer; color: var(--ink); border: 1px solid #35485e; background: #132034; border-radius: 6px; padding: 14px 16px; transition: background .15s, transform .15s; }
+    button:hover { background: #233851; transform: translateY(-1px); }
+    button:focus-visible { outline: 2px solid #fff; outline-offset: 4px; }
+    button.primary { background: var(--cyan); color: #092322; border-color: var(--cyan); }
+    button.primary:hover { background: #9cfff4; }
+    .start { width: 100%; display: flex; align-items: center; justify-content: space-between; text-align: left; }
+    .start strong { font-size: 14px; }
+    .start span { font: 10px ui-monospace, monospace; opacity: .7; }
+    .difficulty { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+    .difficulty button { display: flex; justify-content: space-between; align-items: center; }
+    .difficulty small { color: var(--muted); font: 10px ui-monospace, monospace; }
+    .menu-controls { color: #a3b3cb; font-size: 11px; margin-top: 24px; }
+    kbd { display: inline-block; font: 10px ui-monospace, monospace; border: 1px solid #3b4b61; border-bottom-width: 2px; padding: 3px 5px; border-radius: 4px; color: #d9e7f8; margin: 0 2px; }
+    .actions { display: flex; gap: 12px; justify-content: center; margin-top: 26px; }
+    .actions button { min-width: 130px; }
+    #pauseButton { padding: 9px 12px; font: 11px ui-monospace, monospace; }
+    #pauseButton:disabled { opacity: .3; cursor: default; transform: none; }
+    .final-score { font: 700 44px ui-monospace, monospace; color: var(--cyan); margin: 20px 0 6px; }
+    #notice { position: absolute; top: 20px; left: 0; right: 0; text-align: center; pointer-events: none; color: var(--cyan); font: 12px ui-monospace, monospace; letter-spacing: .12em; text-shadow: 0 2px 10px #000; }
+    footer { height: 64px; display: flex; justify-content: space-between; align-items: center; color: var(--muted); font: 10px ui-monospace, monospace; gap: 10px; }
+    .footer-controls { display: flex; gap: 16px; align-items: center; }
+    .footer-controls span { white-space: nowrap; }
+    @media (max-width: 650px), (max-height: 650px) {
+      .shell { width: min(calc(100% - 24px), calc((100svh - 165px) * 1.5)); min-width: 0; }
+      header { height: 52px; }
+      .edition { font-size: 8px; }
+      .hud { padding: 0 12px; gap: 8px; height: 56px; }
+      .stat-value { font-size: 16px; }
+      .arena { min-height: min(390px, calc(100svh - 165px)); }
+      canvas { position: absolute; inset: 0; object-fit: contain; }
+      .screen { padding: 20px; }
+      h1 { font-size: 48px; margin: 15px 0; }
+      .subtitle { font-size: 12px; margin-bottom: 18px; }
+      .menu-controls { margin-top: 18px; font-size: 10px; }
+      .difficulty button { flex-direction: column; gap: 6px; padding: 10px 8px; }
+      footer { flex-wrap: wrap; justify-content: center; padding: 12px 0; height: auto; }
+      .footer-controls { gap: 8px; font-size: 9px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header><div class="brand"><span>✦</span> ORBITAL / ARCADE</div><div class="edition"><i class="status-dot"></i>SECTOR 01 · SPACE ATTACK</div></header>
+    <main class="console" aria-label="Space Attack arcade game">
+      <div class="hud">
+        <div><span class="stat-label">SCORE</span><span id="score" class="stat-value">000000</span></div>
+        <div><span class="stat-label">PERSONAL BEST</span><span id="best" class="stat-value">000000</span></div>
+        <div><span class="stat-label">WAVE</span><span id="wave" class="stat-value">01</span></div>
+        <div><span class="stat-label">LIVES</span><span id="lives" class="stat-value" aria-label="3 lives">▴ ▴ ▴</span></div>
+        <button id="pauseButton" disabled aria-label="Pause game">Ⅱ</button>
+      </div>
+      <div class="arena">
+        <canvas id="game" width="960" height="640" aria-label="Space battlefield. Move with arrow keys or WASD and hold Space to shoot."></canvas>
+        <div id="notice" role="status" hidden></div>
+        <section id="menu" class="screen" aria-labelledby="title">
+          <div class="panel">
+            <div class="eyebrow">An endless deep-space defense</div>
+            <h1 id="title">SPACE<span>ATTACK</span></h1>
+            <p class="subtitle">One ship. An incoming fleet.<br>Hold your ground. Push your best.</p>
+            <button id="start" class="primary start"><strong>Start Mission <span>↗</span></strong><span>WAVE 01 · ENTER</span></button>
+            <div class="difficulty"><button id="medium">Start Medium <small>WAVE 05</small></button><button id="hard">Start Hard <small>WAVE 10</small></button></div>
+            <div class="menu-controls"><kbd>WASD</kbd> / <kbd>↑ ↓ ← →</kbd> move &nbsp; <kbd>SPACE</kbd> fire &nbsp; <kbd>P</kbd> / <kbd>ESC</kbd> pause</div>
+          </div>
+        </section>
+        <section id="paused" class="screen" aria-labelledby="pauseTitle" hidden>
+          <div class="panel"><div class="eyebrow">Mission on standby</div><h2 id="pauseTitle">Take a breather.</h2><p class="subtitle">Your corner of the universe can wait.<br>Press P or Escape to resume.</p><div class="actions"><button id="resume" class="primary">Resume</button><button id="pauseMenu">Main Menu</button></div></div>
+        </section>
+        <section id="over" class="screen" aria-labelledby="overTitle" hidden>
+          <div class="panel"><div class="eyebrow">Transmission lost</div><h2 id="overTitle">A good run, pilot.</h2><div class="stat-label">FINAL SCORE</div><div id="finalScore" class="final-score">0</div><p id="runSummary" class="subtitle"></p><div class="actions"><button id="retry" class="primary">Try Again · R</button><button id="overMenu">Main Menu</button></div></div>
+        </section>
+      </div>
+    </main>
+    <footer><div class="footer-controls"><span><kbd>WASD</kbd> / <kbd>ARROWS</kbd> MOVE</span><span><kbd>SPACE</kbd> FIRE</span><span><kbd>P</kbd> / <kbd>ESC</kbd> PAUSE</span></div><span>STAY SHARP. AIM HIGH.</span></footer>
+  </div>
+  <script>
+    'use strict';
+
+    // World coordinates are independent of CSS size and display pixel density.
+    const WIDTH = 960, HEIGHT = 640, STEP = 1 / 120;
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const ui = Object.fromEntries(['score', 'best', 'wave', 'lives', 'menu', 'paused', 'over', 'notice', 'pauseButton', 'finalScore', 'runSummary'].map(id => [id, document.getElementById(id)]));
+    const keys = new Set();
+    const BEST_KEY = 'space-attack-best';
+    const colors = ['#f783c5', '#ac94ff', '#ffbc75', '#76ebc4'];
+    let best = 0;
+    try { best = Math.max(0, Number(localStorage.getItem(BEST_KEY)) || 0); if (!Number.isFinite(best)) best = 0; } catch { /* Storage may be disabled for local files. */ }
+    const game = { state: 'menu', startWave: 1, wave: 1, score: 0, lives: 3, time: 0, enemies: [], bullets: [], hostile: [], particles: [], clearTimer: 0, shootTimer: 1, diveTimer: 3, noticeTimer: 0, shake: 0 };
+    const player = { x: WIDTH / 2, y: HEIGHT - 65, radius: 13, cooldown: 0, invulnerable: 0 };
+    const stars = Array.from({ length: 150 }, () => ({ x: Math.random() * WIDTH, y: Math.random() * HEIGHT, depth: .25 + Math.random() * .75, phase: Math.random() * 6.28 }));
+    const clamp = (n, low, high) => Math.max(low, Math.min(high, n));
+    const random = (low, high) => low + Math.random() * (high - low);
+    const pad = n => String(n).padStart(6, '0');
+
+    // Screens, score persistence, and run lifecycle.
+    function saveBest() {
+      best = Math.max(best, game.score);
+      try { localStorage.setItem(BEST_KEY, String(best)); } catch { /* Gameplay remains available without storage. */ }
+    }
+    function refreshHUD() {
+      ui.score.textContent = pad(game.score);
+      ui.best.textContent = pad(best);
+      ui.wave.textContent = String(game.wave).padStart(2, '0');
+      ui.lives.textContent = '▴ '.repeat(game.lives).trim() || '—';
+      ui.lives.setAttribute('aria-label', `${game.lives} lives`);
+    }
+    function setState(state) {
+      game.state = state;
+      keys.clear();
+      for (const name of ['menu', 'paused', 'over']) ui[name].hidden = state !== name;
+      ui.pauseButton.disabled = state !== 'playing';
+      ui.notice.hidden = state !== 'playing' || game.noticeTimer <= 0;
+      const focusTarget = { menu: 'start', paused: 'resume', over: 'retry' }[state];
+      if (focusTarget) document.getElementById(focusTarget).focus({ preventScroll: true });
+      else if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    }
+    function addScore(points) { game.score += points; saveBest(); refreshHUD(); }
+    function announce(text, seconds = 2.2) { ui.notice.textContent = text; game.noticeTimer = seconds; }
+    function startRun(wave = 1) {
+      Object.assign(game, { startWave: wave, wave, score: 0, lives: 3, time: 0, particles: [], shake: 0 });
+      Object.assign(player, { x: WIDTH / 2, y: HEIGHT - 65, cooldown: 0, invulnerable: 1.5 });
+      beginWave();
+      setState('playing');
+      refreshHUD();
+    }
+    function mainMenu() {
+      saveBest();
+      game.enemies = []; game.bullets = []; game.hostile = []; game.particles = [];
+      game.score = 0; game.wave = 1; game.lives = 3;
+      refreshHUD(); setState('menu');
+    }
+    function gameOver() {
+      saveBest();
+      ui.finalScore.textContent = game.score.toLocaleString();
+      ui.runSummary.textContent = `Wave ${game.wave} reached · Restart at wave ${game.startWave}`;
+      setState('over');
+    }
+    function togglePause() {
+      if (game.state === 'playing') setState('paused');
+      else if (game.state === 'paused') setState('playing');
+    }
+
+    // Waves: every ship enters from above, joins the formation, then can dive.
+    function difficulty(wave = game.wave) {
+      return { movement: 1 + wave * .085, bulletSpeed: 165 + wave * 12, diveSpeed: 175 + wave * 13, shotInterval: .14 + 1.7 / (1 + wave * .23), diveInterval: .45 + 4 / (1 + wave * .3) };
+    }
+    function beginWave() {
+      const count = 10 + 5 * game.wave;
+      const columns = Math.min(10, count), rows = Math.ceil(count / columns);
+      game.enemies = Array.from({ length: count }, (_, i) => {
+        const row = Math.floor(i / columns), col = i % columns;
+        const homeX = 120 + col * 80, homeY = 80 + row * Math.min(47, 190 / Math.max(1, rows - 1));
+        return { x: homeX, y: -45 - row * 45, homeX, homeY, radius: 16, mode: 'enter', delay: i * .035, color: colors[row % colors.length], phase: i * .65, vx: 0, vy: 0, dead: false };
+      });
+      game.bullets = []; game.hostile = []; game.clearTimer = 0;
+      game.shootTimer = 1.6; game.diveTimer = 3;
+      announce(`WAVE ${String(game.wave).padStart(2, '0')} / ${count} HOSTILES INBOUND`);
+      refreshHUD();
+    }
+    function beginDive(enemy, speed) {
+      enemy.mode = 'dive';
+      const dx = player.x - enemy.x, dy = Math.max(110, player.y - enemy.y), length = Math.hypot(dx, dy);
+      enemy.vx = dx / length * speed; enemy.vy = dy / length * speed;
+    }
+    function enemyFire(enemy, speed) {
+      const dx = player.x - enemy.x, dy = player.y - enemy.y, length = Math.hypot(dx, dy) || 1;
+      game.hostile.push({ x: enemy.x, y: enemy.y + 12, vx: dx / length * speed, vy: dy / length * speed, radius: 4 });
+    }
+
+    // Swept bullet collisions prevent fast projectiles from skipping through ships.
+    function segmentHits(x1, y1, x2, y2, target, radius) {
+      const dx = x2 - x1, dy = y2 - y1, lengthSquared = dx * dx + dy * dy;
+      const t = lengthSquared ? clamp(((target.x - x1) * dx + (target.y - y1) * dy) / lengthSquared, 0, 1) : 0;
+      return Math.hypot(x1 + t * dx - target.x, y1 + t * dy - target.y) < target.radius + radius;
+    }
+    function explode(x, y, color, count = 20) {
+      for (let i = 0; i < count; i++) {
+        const angle = random(0, Math.PI * 2), speed = random(35, 190), life = random(.25, .7);
+        game.particles.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life, maxLife: life, color, size: random(1.5, 3.5) });
+      }
+    }
+    function hitPlayer() {
+      if (player.invulnerable > 0 || game.state !== 'playing') return false;
+      game.lives--; game.shake = .23;
+      explode(player.x, player.y, '#63f6e7', 32);
+      player.invulnerable = 2;
+      game.hostile = [];
+      refreshHUD();
+      if (game.lives <= 0) gameOver();
+      return true;
+    }
+    function update(dt) {
+      if (game.state !== 'playing') return;
+      game.time += dt;
+      game.noticeTimer = Math.max(0, game.noticeTimer - dt);
+      game.shake = Math.max(0, game.shake - dt);
+      player.invulnerable = Math.max(0, player.invulnerable - dt);
+      player.cooldown = Math.max(0, player.cooldown - dt);
+      const dx = Number(keys.has('ArrowRight') || keys.has('KeyD')) - Number(keys.has('ArrowLeft') || keys.has('KeyA'));
+      const dy = Number(keys.has('ArrowDown') || keys.has('KeyS')) - Number(keys.has('ArrowUp') || keys.has('KeyW'));
+      const length = Math.hypot(dx, dy) || 1;
+      player.x = clamp(player.x + dx / length * 340 * dt, 22, WIDTH - 22);
+      player.y = clamp(player.y + dy / length * 340 * dt, 36, HEIGHT - 26);
+      if (keys.has('Space') && player.cooldown <= 0) {
+        game.bullets.push({ x: player.x, y: player.y - 20, radius: 3 });
+        player.cooldown = .115;
+      }
+      const level = difficulty();
+      for (const enemy of game.enemies) {
+        enemy.delay -= dt;
+        if (enemy.delay > 0) continue;
+        if (enemy.mode === 'enter') {
+          enemy.y += (190 + game.wave * 7) * dt;
+          if (enemy.y >= enemy.homeY) { enemy.y = enemy.homeY; enemy.mode = 'formation'; }
+        } else if (enemy.mode === 'formation') {
+          enemy.x = enemy.homeX + Math.sin(game.time * level.movement + enemy.phase * .12) * 48;
+          enemy.y = enemy.homeY + Math.sin(game.time * level.movement * 1.3 + enemy.phase) * 12;
+        } else {
+          enemy.x += enemy.vx * dt; enemy.y += enemy.vy * dt;
+          if (enemy.x < 20 || enemy.x > WIDTH - 20) { enemy.x = clamp(enemy.x, 20, WIDTH - 20); enemy.vx *= -1; }
+          if (enemy.y > HEIGHT + 40) { enemy.mode = 'enter'; enemy.y = -40; enemy.x = enemy.homeX; }
+        }
+      }
+      const formation = game.enemies.filter(enemy => enemy.mode === 'formation');
+      game.shootTimer -= dt; game.diveTimer -= dt;
+      if (game.shootTimer <= 0 && formation.length) {
+        enemyFire(formation[Math.floor(Math.random() * formation.length)], level.bulletSpeed);
+        game.shootTimer = level.shotInterval * random(.8, 1.2);
+      }
+      if (game.diveTimer <= 0 && formation.length) {
+        beginDive(formation[Math.floor(Math.random() * formation.length)], level.diveSpeed);
+        game.diveTimer = level.diveInterval * random(.8, 1.2);
+      }
+      for (const bullet of game.bullets) {
+        const oldY = bullet.y; bullet.y -= 690 * dt;
+        // The lowest target is the first encountered by an upward-moving shot.
+        let target = null;
+        for (const enemy of game.enemies) {
+          if (!enemy.dead && enemy.delay <= 0 && enemy.y > 0 && segmentHits(bullet.x, oldY, bullet.x, bullet.y, enemy, bullet.radius) && (!target || enemy.y > target.y)) target = enemy;
+        }
+        if (target) { target.dead = true; bullet.dead = true; addScore(target.mode === 'dive' ? 150 : 100); explode(target.x, target.y, target.color); }
+      }
+      for (const bullet of game.hostile) {
+        const oldX = bullet.x, oldY = bullet.y;
+        bullet.x += bullet.vx * dt; bullet.y += bullet.vy * dt;
+        if (segmentHits(oldX, oldY, bullet.x, bullet.y, player, bullet.radius)) { bullet.dead = true; hitPlayer(); }
+      }
+      for (const enemy of game.enemies) {
+        if (!enemy.dead && enemy.delay <= 0 && Math.hypot(enemy.x - player.x, enemy.y - player.y) < enemy.radius + player.radius && hitPlayer()) {
+          enemy.dead = true; explode(enemy.x, enemy.y, enemy.color);
+        }
+      }
+      game.enemies = game.enemies.filter(enemy => !enemy.dead);
+      game.bullets = game.bullets.filter(b => !b.dead && b.y > -20);
+      game.hostile = game.hostile.filter(b => !b.dead && b.y > -30 && b.y < HEIGHT + 30 && b.x > -30 && b.x < WIDTH + 30);
+      for (const p of game.particles) { p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt; }
+      game.particles = game.particles.filter(p => p.life > 0);
+      if (game.state !== 'playing') return;
+      if (!game.enemies.length && !game.clearTimer) {
+        addScore(250 * game.wave);
+        game.clearTimer = 2;
+        game.hostile = [];
+        announce(`SECTOR CLEAR / +${250 * game.wave} BONUS`, 2);
+      }
+      if (game.clearTimer > 0) {
+        game.clearTimer -= dt;
+        if (game.clearTimer <= 0) { game.wave++; beginWave(); }
+      }
+    }
+
+    // Canvas artwork: layered stars, vector ships, bright projectiles, and particles.
+    function drawPlayer(x, y, time, shield = false) {
+      ctx.save(); ctx.translate(x, y);
+      ctx.fillStyle = '#63f6e7'; ctx.shadowColor = '#40e7e1'; ctx.shadowBlur = 15;
+      ctx.beginPath(); ctx.moveTo(0, -22); ctx.lineTo(20, 17); ctx.lineTo(7, 12); ctx.lineTo(0, 17); ctx.lineTo(-7, 12); ctx.lineTo(-20, 17); ctx.closePath(); ctx.fill();
+      ctx.shadowBlur = 0; ctx.fillStyle = '#124d6a';
+      ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(5, 9); ctx.lineTo(-5, 9); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#c0fffb'; ctx.beginPath(); ctx.moveTo(-5, 18); ctx.lineTo(0, 28 + Math.sin(time * 35) * 6); ctx.lineTo(5, 18); ctx.fill();
+      if (shield) { ctx.strokeStyle = '#63f6e788'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI * 2); ctx.stroke(); }
+      ctx.restore();
+    }
+    function drawEnemy(enemy) {
+      ctx.save(); ctx.translate(enemy.x, enemy.y);
+      if (enemy.mode === 'dive') ctx.rotate(-Math.atan2(enemy.vx, enemy.vy) * .5);
+      ctx.fillStyle = enemy.color; ctx.shadowColor = enemy.color; ctx.shadowBlur = 10;
+      ctx.beginPath(); ctx.moveTo(-20, -12); ctx.lineTo(-10, -5); ctx.lineTo(0, -12); ctx.lineTo(10, -5); ctx.lineTo(20, -12); ctx.lineTo(15, 9); ctx.lineTo(5, 15); ctx.lineTo(0, 9); ctx.lineTo(-5, 15); ctx.lineTo(-15, 9); ctx.closePath(); ctx.fill();
+      ctx.shadowBlur = 0; ctx.fillStyle = '#17243b'; ctx.fillRect(-9, -1, 5, 5); ctx.fillRect(4, -1, 5, 5);
+      if (enemy.mode === 'dive') { ctx.fillStyle = '#fff2bb'; ctx.fillRect(-4, -20, 8, 7); }
+      ctx.restore();
+    }
+    function draw(time) {
+      ctx.setTransform(canvas.width / WIDTH, 0, 0, canvas.height / HEIGHT, 0, 0);
+      ctx.fillStyle = '#080e1c'; ctx.fillRect(0, 0, WIDTH, HEIGHT);
+      const glow = ctx.createRadialGradient(480, 240, 20, 480, 240, 600);
+      glow.addColorStop(0, '#16284966'); glow.addColorStop(1, '#080e1c00'); ctx.fillStyle = glow; ctx.fillRect(0, 0, WIDTH, HEIGHT);
+      for (const star of stars) {
+        ctx.globalAlpha = (.35 + .35 * Math.sin(time * .6 + star.phase)) * star.depth + .15;
+        ctx.fillStyle = star.depth > .8 ? '#d2e5ff' : '#718cb4';
+        ctx.fillRect(star.x, star.y, star.depth * 2, star.depth * 2);
+      }
+      ctx.globalAlpha = 1;
+      // Quiet arena markings provide depth without obscuring the action.
+      ctx.strokeStyle = '#56718b18'; ctx.lineWidth = 1;
+      ctx.strokeRect(24, 24, WIDTH - 48, HEIGHT - 48);
+      ctx.setLineDash([3, 12]); ctx.beginPath(); ctx.moveTo(24, HEIGHT - 115); ctx.lineTo(WIDTH - 24, HEIGHT - 115); ctx.stroke(); ctx.setLineDash([]);
+      ctx.save();
+      if (game.shake > 0 && game.state === 'playing') ctx.translate(random(-4, 4), random(-4, 4));
+      if (game.state === 'menu') {
+        for (let i = 0; i < 8; i++) drawEnemy({ x: i % 2 ? 840 : 120, y: 115 + Math.floor(i / 2) * 115 + Math.sin(time + i) * 9, color: colors[Math.floor(i / 2)], mode: 'formation' });
+        drawPlayer(480, 575, time);
+      } else {
+        for (const enemy of game.enemies) if (enemy.delay <= 0) drawEnemy(enemy);
+        ctx.shadowBlur = 12; ctx.shadowColor = '#78fff3'; ctx.fillStyle = '#bffff7';
+        for (const bullet of game.bullets) ctx.fillRect(bullet.x - 2, bullet.y - 9, 4, 18);
+        ctx.shadowColor = '#ff777c'; ctx.fillStyle = '#ff9393';
+        for (const bullet of game.hostile) { ctx.beginPath(); ctx.ellipse(bullet.x, bullet.y, 4, 7, 0, 0, Math.PI * 2); ctx.fill(); }
+        ctx.shadowBlur = 0;
+        if (game.lives > 0) { ctx.globalAlpha = player.invulnerable > 0 ? .55 + .45 * Math.abs(Math.sin(game.time * 17)) : 1; drawPlayer(player.x, player.y, game.time, player.invulnerable > 0); ctx.globalAlpha = 1; }
+        for (const p of game.particles) { ctx.globalAlpha = p.life / p.maxLife; ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, p.size, p.size); }
+        ctx.globalAlpha = 1;
+      }
+      ctx.restore();
+      ui.notice.hidden = game.state !== 'playing' || game.noticeTimer <= 0;
+    }
+
+    // Input and focus handling. Pausing clears held keys to prevent stuck movement.
+    const controlKeys = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'KeyP', 'Escape', 'Enter', 'KeyR']);
+    window.addEventListener('keydown', event => {
+      if (!controlKeys.has(event.code)) return;
+      // Let Enter and Space activate focused menu buttons normally.
+      if (game.state !== 'playing' && event.target instanceof HTMLButtonElement && (event.code === 'Space' || event.code === 'Enter')) return;
+      event.preventDefault();
+      if (!event.repeat) {
+        if (event.code === 'KeyP' || event.code === 'Escape') togglePause();
+        else if (event.code === 'Enter' && game.state === 'menu') startRun(1);
+        else if (event.code === 'KeyR' && game.state === 'over') startRun(game.startWave);
+      }
+      if (game.state === 'playing') keys.add(event.code);
+    });
+    window.addEventListener('keyup', event => keys.delete(event.code));
+    const pauseOnFocusLoss = () => { keys.clear(); if (game.state === 'playing') setState('paused'); };
+    window.addEventListener('blur', pauseOnFocusLoss);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) pauseOnFocusLoss(); });
+    window.addEventListener('pagehide', saveBest);
+    document.getElementById('start').onclick = () => startRun(1);
+    document.getElementById('medium').onclick = () => startRun(5);
+    document.getElementById('hard').onclick = () => startRun(10);
+    document.getElementById('resume').onclick = togglePause;
+    document.getElementById('pauseMenu').onclick = mainMenu;
+    document.getElementById('overMenu').onclick = mainMenu;
+    document.getElementById('retry').onclick = () => startRun(game.startWave);
+    ui.pauseButton.onclick = togglePause;
+    function resize() {
+      const box = canvas.getBoundingClientRect(), density = Math.min(window.devicePixelRatio || 1, 2);
+      // object-fit contains the fixed-ratio backing surface on narrow screens.
+      const scale = Math.min(box.width / WIDTH, box.height / HEIGHT) * density;
+      canvas.width = Math.max(1, Math.round(WIDTH * scale));
+      canvas.height = Math.max(1, Math.round(HEIGHT * scale));
+    }
+    window.addEventListener('resize', resize);
+    resize(); refreshHUD();
+
+    // Fixed simulation steps keep timing consistent across display refresh rates.
+    let lastTime = performance.now(), accumulator = 0;
+    function frame(now) {
+      const dt = Math.min((now - lastTime) / 1000, .1); lastTime = now;
+      for (const star of stars) { star.y += dt * (8 + star.depth * 30); if (star.y > HEIGHT) star.y = 0; }
+      if (game.state === 'playing') {
+        accumulator += dt;
+        while (accumulator >= STEP) { update(STEP); accumulator -= STEP; }
+      } else accumulator = 0;
+      draw(now / 1000);
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  </script>
+</body>
+</html>
